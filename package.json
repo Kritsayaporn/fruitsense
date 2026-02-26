@@ -2,6 +2,8 @@
   "name": "fruitsense",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   }
 }
