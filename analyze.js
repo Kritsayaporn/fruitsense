@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -29,28 +28,20 @@ export default async function handler(req, res) {
     });
   }
 
+  // ⭐ สำคัญสุด
+  const cleanBase64 = imageBase64.includes("base64,")
+    ? imageBase64.split("base64,")[1]
+    : imageBase64;
 
-  // ✅ แยก mime type และ base64
-  let mimeType = "image/jpeg";
-  let cleanBase64 = imageBase64;
-
-  const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/);
-
-  if (match) {
-    mimeType = match[1];
-    cleanBase64 = match[2];
-  }
-
-
-  const prompt = `วิเคราะห์ผลไม้ในรูปนี้และตอบเป็น JSON เท่านั้น:
+  const prompt = `Analyze this fruit image and respond ONLY JSON:
 
 {
-"fruitName":"ชื่อผลไม้",
-"fruitNameEn":"English name",
-"emoji":"emoji",
-"ripeness":0-100,
-"status":"unripe|almost|perfect|overripe",
-"statusTh":"ไทย",
+"fruitName":"ชื่อไทย",
+"fruitNameEn":"English",
+"emoji":"🍌",
+"ripeness":50,
+"status":"perfect",
+"statusTh":"สุกพอดี",
 "color":"สี",
 "texture":"เนื้อ",
 "smell":"กลิ่น",
@@ -59,10 +50,9 @@ export default async function handler(req, res) {
 "isNotFruit":false
 }
 
-ถ้าไม่ใช่ผลไม้ให้ตอบ {"isNotFruit":true}
+If not fruit:
+{"isNotFruit":true}
 `;
-
-
 
   try {
 
@@ -82,7 +72,7 @@ export default async function handler(req, res) {
 
                 {
                   inline_data: {
-                    mime_type: mimeType,
+                    mime_type: "image/jpeg",
                     data: cleanBase64
                   }
                 },
@@ -100,38 +90,30 @@ export default async function handler(req, res) {
       }
     );
 
-
     const data = await geminiRes.json();
 
-
     if (!geminiRes.ok) {
-
-      throw new Error(
-        data.error?.message || "Gemini API error"
-      );
-
+      return res.status(500).json({
+        error: data.error?.message
+      });
     }
-
 
     let text =
       data.candidates[0].content.parts[0].text;
 
     text = text
-      .replace(/```json/g,'')
-      .replace(/```/g,'')
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
       .trim();
-
 
     const result = JSON.parse(text);
 
     return res.status(200).json(result);
 
-
-  }
-  catch(e){
+  } catch (e) {
 
     return res.status(500).json({
-      error:e.message
+      error: e.message
     });
 
   }
