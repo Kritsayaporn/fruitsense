@@ -1,69 +1,139 @@
 export default async function handler(req, res) {
 
-res.setHeader('Access-Control-Allow-Origin', '*');
-res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-if (req.method === 'OPTIONS') {
-return res.status(200).end();
-}
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-const apiKey = process.env.GEMINI_API_KEY;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-const { imageBase64 } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
 
-const cleanBase64 = imageBase64
-.replace(/^data:image\/jpeg;base64,/, '')
-.replace(/^data:image\/png;base64,/, '');
+  if (!apiKey) {
+    return res.status(500).json({
+      error: 'API key not configured'
+    });
+  }
 
-const prompt = "Identify the fruit and respond JSON only";
+  const { imageBase64 } = req.body;
 
-try {
+  if (!imageBase64) {
+    return res.status(400).json({
+      error: 'No image provided'
+    });
+  }
 
-const geminiRes = await fetch(
-`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+
+  // ✅ แยก mime type และ base64
+  let mimeType = "image/jpeg";
+  let cleanBase64 = imageBase64;
+
+  const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/);
+
+  if (match) {
+    mimeType = match[1];
+    cleanBase64 = match[2];
+  }
+
+
+  const prompt = `วิเคราะห์ผลไม้ในรูปนี้และตอบเป็น JSON เท่านั้น:
+
 {
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-contents:[
-{
-parts:[
-{
-inline_data:{
-mime_type:"image/jpeg",
-data:cleanBase64
+"fruitName":"ชื่อผลไม้",
+"fruitNameEn":"English name",
+"emoji":"emoji",
+"ripeness":0-100,
+"status":"unripe|almost|perfect|overripe",
+"statusTh":"ไทย",
+"color":"สี",
+"texture":"เนื้อ",
+"smell":"กลิ่น",
+"eatIn":"ควรกินเมื่อไร",
+"advice":"คำแนะนำ",
+"isNotFruit":false
 }
-},
-{
-text:prompt
-}
-]
-}
-]
-})
-}
-);
 
-const data = await geminiRes.json();
+ถ้าไม่ใช่ผลไม้ให้ตอบ {"isNotFruit":true}
+`;
 
-const text =
-data.candidates[0].content.parts[0].text
-.replace(/```json/g,"")
-.replace(/```/g,"")
-.trim();
 
-return res.status(200).json(JSON.parse(text));
 
-}
-catch(e){
+  try {
 
-return res.status(500).json({
-error:e.message
-});
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
 
-}
+        body: JSON.stringify({
+
+          contents: [
+            {
+              parts: [
+
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: cleanBase64
+                  }
+                },
+
+                {
+                  text: prompt
+                }
+
+              ]
+            }
+          ]
+
+        })
+
+      }
+    );
+
+
+    const data = await geminiRes.json();
+
+
+    if (!geminiRes.ok) {
+
+      throw new Error(
+        data.error?.message || "Gemini API error"
+      );
+
+    }
+
+
+    let text =
+      data.candidates[0].content.parts[0].text;
+
+    text = text
+      .replace(/```json/g,'')
+      .replace(/```/g,'')
+      .trim();
+
+
+    const result = JSON.parse(text);
+
+    return res.status(200).json(result);
+
+
+  }
+  catch(e){
+
+    return res.status(500).json({
+      error:e.message
+    });
+
+  }
 
 }
